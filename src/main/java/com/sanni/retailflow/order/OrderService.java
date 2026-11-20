@@ -125,6 +125,16 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
+    public List<OrderResponse> getAllOrders() {
+        return orderRepository.findAllByOrderByCreatedAtDesc()
+            .stream()
+            .map(order -> buildResponse(
+                order,
+                itemRepository.findByOrderId(order.getId())
+            ))
+            .toList();
+    }
+
     public OrderResponse getOrderById(Long orderId) {
 
         CustomerOrder order = orderRepository.findById(orderId)

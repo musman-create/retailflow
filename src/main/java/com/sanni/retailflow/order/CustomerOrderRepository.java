@@ -8,4 +8,6 @@ public interface CustomerOrderRepository
         extends JpaRepository<CustomerOrder, Long> {
 
     List<CustomerOrder> findByCustomerIdOrderByCreatedAtDesc(Long customerId);
+
+    List<CustomerOrder> findAllByOrderByCreatedAtDesc();
 }
