@@ -35,6 +35,14 @@ function App() {
   const [activePage, setActivePage] = useState('Dashboard')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
+  const [orders, setOrders] = useState([])
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const [ordersError, setOrdersError] = useState('')
+  const [orderSearch, setOrderSearch] = useState('')
+  const [orderStatusFilter, setOrderStatusFilter] = useState('ALL')
+  const [selectedOrder, setSelectedOrder] = useState(null)
+  const [updatingOrderId, setUpdatingOrderId] = useState(null)
+
 const [showAddProduct, setShowAddProduct] = useState(false)
 const [editingProductId, setEditingProductId] = useState(null)
 const [saving, setSaving] = useState(false)
@@ -49,6 +57,26 @@ const [productForm, setProductForm] = useState({
   stockQuantity: '',
   category: '',
 })
+
+  const loadOrders = useCallback(async () => {
+    setOrdersLoading(true)
+
+    try {
+      const response = await fetch('/api/orders')
+
+      if (!response.ok) {
+        throw new Error(`Server returned HTTP ${response.status}`)
+      }
+
+      const data = await response.json()
+      setOrders(Array.isArray(data) ? data : [])
+      setOrdersError('')
+    } catch (err) {
+      setOrdersError(err.message || 'Could not load orders')
+    } finally {
+      setOrdersLoading(false)
+    }
+  }, [])
 
   const loadProducts = useCallback(async () => {
     try {
@@ -219,6 +247,12 @@ const [productForm, setProductForm] = useState({
     }
   }, [])
 
+  useEffect(() => {
+    if (activePage === 'Orders') {
+      loadOrders()
+    }
+  }, [activePage, loadOrders])
+
   const filteredProducts = useMemo(() => {
     const term = search.toLowerCase().trim()
 
@@ -235,6 +269,23 @@ const [productForm, setProductForm] = useState({
         .some((value) => String(value).toLowerCase().includes(term))
     )
   }, [products, search])
+
+  const filteredOrders = useMemo(() => {
+    const term = orderSearch.trim().toLowerCase()
+
+    return orders.filter((order) => {
+      const matchesSearch =
+        !term ||
+        String(order.orderId).toLowerCase().includes(term) ||
+        String(order.customerName || '').toLowerCase().includes(term)
+
+      const matchesStatus =
+        orderStatusFilter === 'ALL' ||
+        order.status === orderStatusFilter
+
+      return matchesSearch && matchesStatus
+    })
+  }, [orders, orderSearch, orderStatusFilter])
 
   const totalUnits = products.reduce(
     (total, product) => total + (Number(product.stockQuantity) || 0),
@@ -414,10 +465,13 @@ const [productForm, setProductForm] = useState({
 
     <button
       className="refresh-button"
-      onClick={loadProducts}
-      disabled={loading}
+      onClick={activePage === 'Orders' ? loadOrders : loadProducts}
+      disabled={activePage === 'Orders' ? ordersLoading : loading}
     >
-      <RefreshCw size={16} className={loading ? 'spin' : ''} />
+      <RefreshCw
+        size={16}
+        className={(activePage === 'Orders' ? ordersLoading : loading) ? 'spin' : ''}
+      />
       Refresh data
     </button>
   </div>
@@ -854,6 +908,115 @@ const [productForm, setProductForm] = useState({
                 </section>
               )}
             </>
+          ) : activePage === 'Orders' ? (
+            <section className="content-card">
+              <div className="card-heading">
+                <div>
+                  <h3>All customer orders</h3>
+                  <p>Live order information from your RetailFlow database</p>
+                </div>
+                <div className="product-total">
+                  {orders.length} {orders.length === 1 ? 'order' : 'orders'}
+                </div>
+              </div>
+
+              <div className="table-toolbar">
+                <div className="search-box">
+                  <Search />
+                  <input
+                    type="search"
+                    placeholder="Search by order ID or customer..."
+                    value={orderSearch}
+                    onChange={(event) => setOrderSearch(event.target.value)}
+                  />
+                </div>
+
+                <select
+                  className="filter-button"
+                  value={orderStatusFilter}
+                  onChange={(event) => setOrderStatusFilter(event.target.value)}
+                >
+                  <option value="ALL">All statuses</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="PROCESSING">Processing</option>
+                  <option value="SHIPPED">Shipped</option>
+                  <option value="DELIVERED">Delivered</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+
+              {ordersError && (
+                <div className="error-banner">{ordersError}</div>
+              )}
+
+              <div className="table-wrap">
+                <table className="product-table">
+                  <thead>
+                    <tr>
+                      <th>ORDER ID</th>
+                      <th>CUSTOMER</th>
+                      <th>DATE</th>
+                      <th>ITEMS</th>
+                      <th>TOTAL AMOUNT</th>
+                      <th>STATUS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ordersLoading ? (
+                      <tr>
+                        <td colSpan="6" className="table-message">
+                          Loading orders...
+                        </td>
+                      </tr>
+                    ) : filteredOrders.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="table-message">
+                          {orders.length === 0
+                            ? 'No orders have been recorded yet.'
+                            : 'No orders match your search or status filter.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredOrders.map((order) => (
+                        <tr key={order.orderId}>
+                          <td className="sku-cell">#{order.orderId}</td>
+                          <td>
+                            <strong>{order.customerName || 'Unknown customer'}</strong>
+                          </td>
+                          <td>
+                            {order.createdAt
+                              ? new Date(order.createdAt).toLocaleString('en-NG', {
+                                  dateStyle: 'medium',
+                                  timeStyle: 'short',
+                                })
+                              : '—'}
+                          </td>
+                          <td>{Array.isArray(order.items) ? order.items.length : 0}</td>
+                          <td className="price-cell">
+                            {currency.format(Number(order.totalAmount) || 0)}
+                          </td>
+                          <td>
+                            <span className={`status-pill order-status status-${String(order.status || '').toLowerCase()}`}>
+                              {order.status || 'UNKNOWN'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="table-footer">
+                <span>
+                  Showing {filteredOrders.length} of {orders.length} orders
+                </span>
+                <span className="live-label">
+                  <span className="status-dot" />
+                  Live database data
+                </span>
+              </div>
+            </section>
           ) : (
             <section className="content-card coming-soon">
               <div className="coming-icon">

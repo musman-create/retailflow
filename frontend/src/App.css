@@ -1376,3 +1376,29 @@ button {
 .delete-button:hover {
   background: #fee2e2;
 }
+
+/* Orders management status colours */
+.order-status.status-pending {
+  color: #b87923;
+  background: #fff4e3;
+}
+
+.order-status.status-processing {
+  color: #3979c9;
+  background: #edf4ff;
+}
+
+.order-status.status-shipped {
+  color: #7652b5;
+  background: #f2edff;
+}
+
+.order-status.status-delivered {
+  color: #18855d;
+  background: #e8f7f0;
+}
+
+.order-status.status-cancelled {
+  color: #c44d4d;
+  background: #fff0f0;
+}
