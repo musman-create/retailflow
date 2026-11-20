@@ -51,7 +51,7 @@ public class ProductService {
     }
 
     public List<Product> getAll() {
-        return repository.findAll(Sort.by(Sort.Direction.DESC, "id"));
+        return repository.findByActiveTrueOrderByIdDesc();
     }
 
     public Product getById(Long id) {
@@ -64,6 +64,12 @@ public class ProductService {
     @Transactional
     public Product update(Long id, ProductRequest request) {
         Product product = getById(id);
+
+        if (!product.isActive()) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "Archived products cannot be edited"
+            );
+        }
 
         if (repository.existsBySkuAndIdNot(request.sku(), id)) {
             throw new ResponseStatusException(
@@ -79,14 +85,14 @@ public class ProductService {
     public void delete(Long id) {
         Product product = getById(id);
 
-        if (movementRepository.existsByProductId(id)) {
+        if (!product.isActive()) {
             throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "This product has inventory history and cannot be deleted"
+                HttpStatus.CONFLICT, "Product is already archived"
             );
         }
 
-        repository.delete(product);
+        product.setActive(false);
+        repository.save(product);
     }
 
     private void copyRequestToProduct(ProductRequest request, Product product) {

@@ -33,6 +33,12 @@ public class InventoryService {
                 HttpStatus.NOT_FOUND, "Product not found"
             ));
 
+        if (!product.isActive()) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "Cannot adjust stock for an archived product"
+            );
+        }
+
         int currentStock = product.getStockQuantity();
         int quantity = request.quantity();
 
@@ -80,6 +86,6 @@ public class InventoryService {
 
     @Transactional(readOnly = true)
     public List<Product> getLowStockProducts(Integer threshold) {
-        return productRepository.findByStockQuantityLessThanEqual(threshold);
+        return productRepository.findByActiveTrueAndStockQuantityLessThanEqual(threshold);
     }
 }

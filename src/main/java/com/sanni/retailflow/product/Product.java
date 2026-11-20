@@ -30,6 +30,9 @@ public class Product {
     @Column(nullable = false, length = 100)
     private String category;
 
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean active = true;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -51,6 +54,7 @@ public class Product {
     public BigDecimal getPrice() { return price; }
     public Integer getStockQuantity() { return stockQuantity; }
     public String getCategory() { return category; }
+    public boolean isActive() { return active; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 
@@ -60,4 +64,5 @@ public class Product {
     public void setPrice(BigDecimal price) { this.price = price; }
     public void setStockQuantity(Integer stockQuantity) { this.stockQuantity = stockQuantity; }
     public void setCategory(String category) { this.category = category; }
+    public void setActive(boolean active) { this.active = active; }
 }

@@ -11,6 +11,10 @@ import java.util.Optional;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
+    List<Product> findByActiveTrueOrderByIdDesc();
+
+    List<Product> findByActiveTrueAndStockQuantityLessThanEqual(Integer threshold);
+
     boolean existsBySku(String sku);
 
     boolean existsBySkuAndIdNot(String sku, Long id);

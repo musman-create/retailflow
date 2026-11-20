@@ -66,6 +66,13 @@ public class OrderService {
                     "Product not found: " + itemRequest.productId()
                 ));
 
+            if (!product.isActive()) {
+                throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Archived products cannot be added to new orders"
+                );
+            }
+
             int quantity = itemRequest.quantity();
             int currentStock = product.getStockQuantity();
 

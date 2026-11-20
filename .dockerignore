@@ -5,3 +5,7 @@ target/
 .idea/
 .vscode/
 *.log
+
+# Frontend generated files and dependencies
+frontend/node_modules/
+frontend/dist/
