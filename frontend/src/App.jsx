@@ -599,6 +599,104 @@ const [productForm, setProductForm] = useState({
     </div>
   </div>
 )}
+{selectedOrder && (
+  <div className="modal-backdrop">
+    <div className="product-modal order-details-modal" role="dialog" aria-modal="true" aria-labelledby="order-details-title">
+      <div className="modal-header">
+        <div>
+          <h3 id="order-details-title">Order #{selectedOrder.orderId}</h3>
+          <p>Full details of this customer order</p>
+        </div>
+        <button
+          type="button"
+          className="close-button"
+          onClick={() => setSelectedOrder(null)}
+          aria-label="Close order details"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="order-details-summary">
+        <div>
+          <span>Customer</span>
+          <strong>{selectedOrder.customerName || 'Unknown customer'}</strong>
+        </div>
+        <div>
+          <span>Customer ID</span>
+          <strong>{selectedOrder.customerId ?? '—'}</strong>
+        </div>
+        <div>
+          <span>Order date</span>
+          <strong>
+            {selectedOrder.createdAt
+              ? new Date(selectedOrder.createdAt).toLocaleString('en-NG', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short'
+                })
+              : '—'}
+          </strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong>
+            <span className={`status-pill order-status status-${String(selectedOrder.status || '').toLowerCase()}`}>
+              {selectedOrder.status || 'UNKNOWN'}
+            </span>
+          </strong>
+        </div>
+      </div>
+
+      <h4 className="order-items-heading">Items in this order</h4>
+      <div className="table-wrap">
+        <table className="product-table">
+          <thead>
+            <tr>
+              <th>PRODUCT</th>
+              <th>QUANTITY</th>
+              <th>UNIT PRICE</th>
+              <th>SUBTOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
+              selectedOrder.items.map((item, index) => (
+                <tr key={`${item.productId}-${index}`}>
+                  <td><strong>{item.productName || 'Unknown product'}</strong></td>
+                  <td>{item.quantity}</td>
+                  <td>{currency.format(Number(item.unitPrice) || 0)}</td>
+                  <td className="price-cell">
+                    {currency.format(Number(item.subtotal) || 0)}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="4">No order items found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="order-details-total">
+        <span>Order total</span>
+        <strong>{currency.format(Number(selectedOrder.totalAmount) || 0)}</strong>
+      </div>
+
+      <div className="form-actions">
+        <button
+          type="button"
+          className="cancel-button"
+          onClick={() => setSelectedOrder(null)}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
           {activePage === 'Dashboard' || activePage === 'Products' ? (
             <>
               {activePage === 'Dashboard' && (
@@ -959,18 +1057,19 @@ const [productForm, setProductForm] = useState({
                       <th>ITEMS</th>
                       <th>TOTAL AMOUNT</th>
                       <th>STATUS</th>
+                      <th>ACTION</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ordersLoading ? (
                       <tr>
-                        <td colSpan="6" className="table-message">
+                        <td colSpan="7" className="table-message">
                           Loading orders...
                         </td>
                       </tr>
                     ) : filteredOrders.length === 0 ? (
                       <tr>
-                        <td colSpan="6" className="table-message">
+                        <td colSpan="7" className="table-message">
                           {orders.length === 0
                             ? 'No orders have been recorded yet.'
                             : 'No orders match your search or status filter.'}
@@ -999,6 +1098,15 @@ const [productForm, setProductForm] = useState({
                             <span className={`status-pill order-status status-${String(order.status || '').toLowerCase()}`}>
                               {order.status || 'UNKNOWN'}
                             </span>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="edit-button"
+                              onClick={() => setSelectedOrder(order)}
+                            >
+                              View Details
+                            </button>
                           </td>
                         </tr>
                       ))
