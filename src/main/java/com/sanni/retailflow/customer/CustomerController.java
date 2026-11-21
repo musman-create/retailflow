@@ -34,4 +34,12 @@ public class CustomerController {
     public Customer getById(@PathVariable Long id) {
         return service.getById(id);
     }
+
+    @PutMapping("/{id}")
+    public Customer update(
+        @PathVariable Long id,
+        @Valid @RequestBody CustomerRequest request
+    ) {
+        return service.update(id, request);
+    }
 }

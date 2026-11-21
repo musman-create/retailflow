@@ -50,4 +50,28 @@ public class CustomerService {
                 HttpStatus.NOT_FOUND, "Customer not found"
             ));
     }
+
+    public Customer update(Long id, CustomerRequest request) {
+
+        Customer customer = getById(id);
+
+        if (repository.existsByEmailAndIdNot(request.email(), id)) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "Another customer already uses this email"
+            );
+        }
+
+        if (repository.existsByPhoneAndIdNot(request.phone(), id)) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "Another customer already uses this phone number"
+            );
+        }
+
+        customer.setFullName(request.fullName());
+        customer.setEmail(request.email());
+        customer.setPhone(request.phone());
+        customer.setAddress(request.address());
+
+        return repository.save(customer);
+    }
 }
