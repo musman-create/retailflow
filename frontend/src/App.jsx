@@ -78,6 +78,56 @@ const [productForm, setProductForm] = useState({
     }
   }, [])
 
+  async function handleUpdateOrderStatus(order, newStatus) {
+    if (!order || !newStatus || newStatus === order.status) return
+
+    if (newStatus === 'CANCELLED') {
+      const confirmed = window.confirm(
+        `Cancel order #${order.orderId}? The quantities ordered will be returned to inventory.`
+      )
+
+      if (!confirmed) return
+    }
+
+    setUpdatingOrderId(order.orderId)
+    setOrdersError('')
+
+    try {
+      const response = await fetch(`/api/orders/${order.orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) {
+        const result = await response.json().catch(() => null)
+        throw new Error(
+          result?.message ||
+          result?.detail ||
+          result?.error ||
+          `Could not update order status (HTTP ${response.status})`
+        )
+      }
+
+      await loadOrders()
+
+      if (newStatus === 'CANCELLED') {
+        await loadProducts()
+      }
+
+      if (selectedOrder?.orderId === order.orderId) {
+        const updatedOrder = await response.json().catch(() => null)
+        if (updatedOrder) setSelectedOrder(updatedOrder)
+      }
+    } catch (err) {
+      setOrdersError(err.message || 'Could not update order status')
+    } finally {
+      setUpdatingOrderId(null)
+    }
+  }
+
   const loadProducts = useCallback(async () => {
     try {
       const response = await fetch('/api/products')
@@ -1100,6 +1150,26 @@ const [productForm, setProductForm] = useState({
                             </span>
                           </td>
                           <td>
+                            <select
+                              className="filter-button"
+                              aria-label={`Update status for order ${order.orderId}`}
+                              value={order.status || 'PENDING'}
+                              disabled={
+                                updatingOrderId === order.orderId ||
+                                order.status === 'DELIVERED' ||
+                                order.status === 'CANCELLED'
+                              }
+                              onChange={(event) =>
+                                handleUpdateOrderStatus(order, event.target.value)
+                              }
+                            >
+                              <option value="PENDING">Pending</option>
+                              <option value="PROCESSING">Processing</option>
+                              <option value="SHIPPED">Shipped</option>
+                              <option value="DELIVERED">Delivered</option>
+                              <option value="CANCELLED">Cancelled</option>
+                            </select>
+
                             <button
                               type="button"
                               className="edit-button"
