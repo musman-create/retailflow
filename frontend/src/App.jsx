@@ -42,6 +42,7 @@ function App() {
   const [orderStatusFilter, setOrderStatusFilter] = useState('ALL')
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
+  const [reportPeriod, setReportPeriod] = useState('ALL')
 
   const [customers, setCustomers] = useState([])
   const [customersLoading, setCustomersLoading] = useState(false)
@@ -456,7 +457,7 @@ const [productForm, setProductForm] = useState({
   }, [])
 
   useEffect(() => {
-    if (activePage === 'Orders') {
+    if (activePage === 'Orders' || activePage === 'Reports') {
       loadOrders()
     }
 
@@ -498,6 +499,133 @@ const [productForm, setProductForm] = useState({
       return matchesSearch && matchesStatus
     })
   }, [orders, orderSearch, orderStatusFilter])
+
+  const reportOrders = useMemo(() => {
+    if (reportPeriod === 'ALL') return orders
+
+    const days = Number(reportPeriod)
+    const now = new Date()
+    const start = new Date(now)
+    start.setHours(0, 0, 0, 0)
+    start.setDate(start.getDate() - (days - 1))
+
+    return orders.filter((order) => {
+      if (!order.createdAt) return false
+
+      const createdAt = new Date(order.createdAt)
+
+      return (
+        !Number.isNaN(createdAt.getTime()) &&
+        createdAt >= start &&
+        createdAt <= now
+      )
+    })
+  }, [orders, reportPeriod])
+
+  const salesAnalytics = useMemo(() => {
+    const deliveredOrders = reportOrders.filter(
+      (order) => order.status === 'DELIVERED'
+    )
+
+    const pendingOrders = reportOrders.filter((order) =>
+      ['PENDING', 'PROCESSING', 'SHIPPED'].includes(order.status)
+    )
+
+    const cancelledOrders = reportOrders.filter(
+      (order) => order.status === 'CANCELLED'
+    )
+
+    const revenue = deliveredOrders.reduce(
+      (total, order) => total + (Number(order.totalAmount) || 0),
+      0
+    )
+
+    const pendingValue = pendingOrders.reduce(
+      (total, order) => total + (Number(order.totalAmount) || 0),
+      0
+    )
+
+    const productSales = {}
+
+    deliveredOrders.forEach((order) => {
+      if (!Array.isArray(order.items)) return
+
+      order.items.forEach((item) => {
+        const name = item.productName || 'Unknown product'
+        if (!productSales[name]) {
+          productSales[name] = { name, quantity: 0, revenue: 0 }
+        }
+
+        productSales[name].quantity += Number(item.quantity) || 0
+        productSales[name].revenue += Number(item.subtotal) || 0
+      })
+    })
+
+    const topProducts = Object.values(productSales).sort(
+      (a, b) => b.quantity - a.quantity
+    )
+
+    return {
+      revenue,
+      deliveredCount: deliveredOrders.length,
+      pendingValue,
+      pendingCount: pendingOrders.length,
+      cancelledCount: cancelledOrders.length,
+      totalOrders: reportOrders.length,
+      topProducts,
+    }
+  }, [reportOrders])
+
+  const salesTrend = useMemo(() => {
+    const dailyRevenue = {}
+
+    reportOrders.forEach((order) => {
+      if (order.status !== 'DELIVERED' || !order.createdAt) return
+
+      const date = new Date(order.createdAt)
+      if (Number.isNaN(date.getTime())) return
+
+      const dateKey = [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0'),
+      ].join('-')
+
+      dailyRevenue[dateKey] =
+        (dailyRevenue[dateKey] || 0) +
+        (Number(order.totalAmount) || 0)
+    })
+
+    if (reportPeriod === 'ALL') {
+      return Object.entries(dailyRevenue)
+        .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+        .map(([date, revenue]) => ({ date, revenue }))
+    }
+
+    const days = Number(reportPeriod)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const trend = []
+
+    for (let offset = days - 1; offset >= 0; offset--) {
+      const date = new Date(today)
+      date.setDate(today.getDate() - offset)
+
+      const dateKey = [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0'),
+      ].join('-')
+
+      trend.push({
+        date: dateKey,
+        revenue: dailyRevenue[dateKey] || 0,
+      })
+    }
+
+    return trend
+  }, [reportOrders, reportPeriod])
 
   const filteredCustomers = useMemo(() => {
     const term = customerSearch.trim().toLowerCase()
@@ -1945,18 +2073,235 @@ const [productForm, setProductForm] = useState({
                 </span>
               </div>
             </section>
+          ) : activePage === 'Reports' ? (
+            <div className="reports-page">
+              {ordersError ? (
+                <section className="content-card">
+                  <div className="empty-state">
+                    <AlertTriangle size={26} />
+                    <p>{ordersError}</p>
+                    <button className="primary-button" onClick={loadOrders}>
+                      Try again
+                    </button>
+                  </div>
+                </section>
+              ) : ordersLoading ? (
+                <section className="content-card">
+                  <div className="empty-state">
+                    <p>Loading sales reports...</p>
+                  </div>
+                </section>
+              ) : orders.length === 0 ? (
+                <section className="content-card">
+                  <div className="empty-state">
+                    <BarChart3 size={28} />
+                    <h3>No sales data yet</h3>
+                    <p>Sales analytics will appear here when orders are recorded.</p>
+                  </div>
+                </section>
+              ) : (
+                <>
+                  <div className="reports-filter-bar">
+                    <div>
+                      <h3>Sales performance</h3>
+                      <p>Choose a period to analyse your store performance.</p>
+                    </div>
+                    <div className="reports-range-controls">
+                      <button
+                        type="button"
+                        className={reportPeriod === '7' ? 'report-range-button active' : 'report-range-button'}
+                        onClick={() => setReportPeriod('7')}
+                      >
+                        Last 7 days
+                      </button>
+                      <button
+                        type="button"
+                        className={reportPeriod === '30' ? 'report-range-button active' : 'report-range-button'}
+                        onClick={() => setReportPeriod('30')}
+                      >
+                        Last 30 days
+                      </button>
+                      <button
+                        type="button"
+                        className={reportPeriod === 'ALL' ? 'report-range-button active' : 'report-range-button'}
+                        onClick={() => setReportPeriod('ALL')}
+                      >
+                        All time
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="stats-grid reports-stats">
+                    <div className="stat-card">
+                      <div className="stat-icon revenue-icon">
+                        <CircleDollarSign size={22} />
+                      </div>
+                      <div>
+                        <p>Total revenue</p>
+                        <h3>{currency.format(salesAnalytics.revenue)}</h3>
+                        <span>Delivered orders only</span>
+                      </div>
+                    </div>
+
+                    <div className="stat-card">
+                      <div className="stat-icon">
+                        <CheckCircle2 size={22} />
+                      </div>
+                      <div>
+                        <p>Completed orders</p>
+                        <h3>{salesAnalytics.deliveredCount}</h3>
+                        <span>Successfully delivered</span>
+                      </div>
+                    </div>
+
+                    <div className="stat-card">
+                      <div className="stat-icon">
+                        <Clock3 size={22} />
+                      </div>
+                      <div>
+                        <p>Pending sales</p>
+                        <h3>{currency.format(salesAnalytics.pendingValue)}</h3>
+                        <span>{salesAnalytics.pendingCount} active orders</span>
+                      </div>
+                    </div>
+
+                    <div className="stat-card">
+                      <div className="stat-icon">
+                        <AlertTriangle size={22} />
+                      </div>
+                      <div>
+                        <p>Cancelled orders</p>
+                        <h3>{salesAnalytics.cancelledCount}</h3>
+                        <span>Excluded from revenue</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <section className="content-card">
+                    <div className="table-header">
+                      <div>
+                        <h3>Sales trend</h3>
+                        <p>Daily revenue from successfully delivered orders</p>
+                      </div>
+                      <strong>{currency.format(salesAnalytics.revenue)}</strong>
+                    </div>
+
+                    {salesTrend.length === 0 ? (
+                      <div className="empty-state">
+                        <BarChart3 size={26} />
+                        <p>No delivered sales in this reporting period.</p>
+                      </div>
+                    ) : (
+                      <div className="sales-chart">
+                        {salesTrend.map((item) => {
+                          const maximumRevenue = Math.max(
+                            ...salesTrend.map((entry) => entry.revenue),
+                            1
+                          )
+                          const barHeight = item.revenue > 0
+                            ? Math.max((item.revenue / maximumRevenue) * 100, 4)
+                            : 0
+
+                          return (
+                            <div className="sales-chart-column" key={item.date}>
+                              <strong>{currency.format(item.revenue)}</strong>
+                              <div className="sales-chart-track">
+                                <div
+                                  className="sales-chart-bar"
+                                  style={{ height: `${barHeight}%` }}
+                                />
+                              </div>
+                              <span>
+                                {new Date(`${item.date}T00:00:00`).toLocaleDateString(
+                                  'en-NG',
+                                  { day: 'numeric', month: 'short' }
+                                )}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="content-card">
+                    <div className="table-header">
+                      <div>
+                        <h3>Best-selling products</h3>
+                        <p>Ranked by quantities in delivered orders</p>
+                      </div>
+                      <span className="live-label">
+                        <span className="status-dot" />
+                        Live database data
+                      </span>
+                    </div>
+
+                    {salesAnalytics.topProducts.length === 0 ? (
+                      <div className="empty-state">
+                        <Boxes size={26} />
+                        <p>No delivered product sales to report yet.</p>
+                      </div>
+                    ) : (
+                      <div className="table-wrapper">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Rank</th>
+                              <th>Product</th>
+                              <th>Units sold</th>
+                              <th>Sales value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {salesAnalytics.topProducts.map((product, index) => (
+                              <tr key={product.name}>
+                                <td>#{index + 1}</td>
+                                <td><strong>{product.name}</strong></td>
+                                <td>{product.quantity}</td>
+                                <td className="price-cell">
+                                  {currency.format(product.revenue)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="content-card">
+                    <div className="table-header">
+                      <div>
+                        <h3>Order overview</h3>
+                        <p>Summary of all recorded order statuses</p>
+                      </div>
+                    </div>
+                    <div className="reports-overview">
+                      <div>
+                        <span>Total orders</span>
+                        <strong>{salesAnalytics.totalOrders}</strong>
+                      </div>
+                      <div>
+                        <span>Active orders</span>
+                        <strong>{salesAnalytics.pendingCount}</strong>
+                      </div>
+                      <div>
+                        <span>Cancelled orders</span>
+                        <strong>{salesAnalytics.cancelledCount}</strong>
+                      </div>
+                      <div>
+                        <span>Pending order value</span>
+                        <strong>{currency.format(salesAnalytics.pendingValue)}</strong>
+                      </div>
+                    </div>
+                  </section>
+                </>
+              )}
+            </div>
           ) : (
             <section className="content-card coming-soon">
               <div className="coming-icon">
-                {activePage === 'Orders' ? (
-                  <ShoppingCart size={30} />
-                ) : activePage === 'Customers' ? (
-                  <Users size={30} />
-                ) : activePage === 'Reports' ? (
-                  <BarChart3 size={30} />
-                ) : (
-                  <Settings size={30} />
-                )}
+                <Settings size={30} />
               </div>
               <h3>{activePage} workspace</h3>
               <p>
