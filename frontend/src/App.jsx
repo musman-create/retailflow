@@ -43,6 +43,23 @@ function App() {
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
 
+  const [customers, setCustomers] = useState([])
+  const [customersLoading, setCustomersLoading] = useState(false)
+  const [customersError, setCustomersError] = useState('')
+  const [customerSearch, setCustomerSearch] = useState('')
+
+  const [editingCustomerId, setEditingCustomerId] = useState(null)
+  const [showAddCustomer, setShowAddCustomer] = useState(false)
+  const [savingCustomer, setSavingCustomer] = useState(false)
+  const [customerFormError, setCustomerFormError] = useState('')
+  const [customerForm, setCustomerForm] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    address: '',
+  })
+
+
 const [showAddProduct, setShowAddProduct] = useState(false)
 const [editingProductId, setEditingProductId] = useState(null)
 const [saving, setSaving] = useState(false)
@@ -57,6 +74,74 @@ const [productForm, setProductForm] = useState({
   stockQuantity: '',
   category: '',
 })
+
+  async function handleAddCustomer(event) {
+    event.preventDefault()
+
+    setCustomerFormError('')
+    setSavingCustomer(true)
+
+    const isEditing = editingCustomerId !== null
+
+    try {
+      const response = await fetch(
+        isEditing
+          ? `/api/customers/${editingCustomerId}`
+          : '/api/customers',
+        {
+          method: isEditing ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fullName: customerForm.fullName.trim(),
+            email: customerForm.email.trim(),
+            phone: customerForm.phone.trim(),
+            address: customerForm.address.trim(),
+          }),
+        }
+      )
+
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ||
+          result?.error ||
+          (isEditing ? 'Could not update customer.' : 'Could not register customer.')
+        )
+      }
+
+      setCustomerForm({
+        fullName: '',
+        email: '',
+        phone: '',
+        address: '',
+      })
+
+      setEditingCustomerId(null)
+      setShowAddCustomer(false)
+      await loadCustomers()
+    } catch (err) {
+      setCustomerFormError(err.message || 'Something went wrong.')
+    } finally {
+      setSavingCustomer(false)
+    }
+  }
+
+  function handleEditCustomer(customer) {
+    setCustomerFormError('')
+    setEditingCustomerId(customer.id)
+
+    setCustomerForm({
+      fullName: customer.fullName || '',
+      email: customer.email || '',
+      phone: customer.phone || '',
+      address: customer.address || '',
+    })
+
+    setShowAddCustomer(true)
+  }
 
   const loadOrders = useCallback(async () => {
     setOrdersLoading(true)
@@ -127,6 +212,26 @@ const [productForm, setProductForm] = useState({
       setUpdatingOrderId(null)
     }
   }
+
+  const loadCustomers = useCallback(async () => {
+    setCustomersLoading(true)
+
+    try {
+      const response = await fetch('/api/customers')
+
+      if (!response.ok) {
+        throw new Error(`Server returned HTTP ${response.status}`)
+      }
+
+      const data = await response.json()
+      setCustomers(Array.isArray(data) ? data : [])
+      setCustomersError('')
+    } catch (err) {
+      setCustomersError(err.message || 'Could not load customers')
+    } finally {
+      setCustomersLoading(false)
+    }
+  }, [])
 
   const loadProducts = useCallback(async () => {
     try {
@@ -301,7 +406,11 @@ const [productForm, setProductForm] = useState({
     if (activePage === 'Orders') {
       loadOrders()
     }
-  }, [activePage, loadOrders])
+
+    if (activePage === 'Customers') {
+      loadCustomers()
+    }
+  }, [activePage, loadOrders, loadCustomers])
 
   const filteredProducts = useMemo(() => {
     const term = search.toLowerCase().trim()
@@ -336,6 +445,23 @@ const [productForm, setProductForm] = useState({
       return matchesSearch && matchesStatus
     })
   }, [orders, orderSearch, orderStatusFilter])
+
+  const filteredCustomers = useMemo(() => {
+    const term = customerSearch.trim().toLowerCase()
+
+    if (!term) return customers
+
+    return customers.filter((customer) =>
+      [
+        customer.fullName,
+        customer.email,
+        customer.phone,
+        customer.address,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term))
+    )
+  }, [customers, customerSearch])
 
   const totalUnits = products.reduce(
     (total, product) => total + (Number(product.stockQuantity) || 0),
@@ -515,12 +641,32 @@ const [productForm, setProductForm] = useState({
 
     <button
       className="refresh-button"
-      onClick={activePage === 'Orders' ? loadOrders : loadProducts}
-      disabled={activePage === 'Orders' ? ordersLoading : loading}
+      onClick={
+        activePage === 'Customers'
+          ? loadCustomers
+          : activePage === 'Orders'
+            ? loadOrders
+            : loadProducts
+      }
+      disabled={
+        activePage === 'Customers'
+          ? customersLoading
+          : activePage === 'Orders'
+            ? ordersLoading
+            : loading
+      }
     >
       <RefreshCw
         size={16}
-        className={(activePage === 'Orders' ? ordersLoading : loading) ? 'spin' : ''}
+        className={
+          (activePage === 'Customers'
+            ? customersLoading
+            : activePage === 'Orders'
+              ? ordersLoading
+              : loading)
+            ? 'spin'
+            : ''
+        }
       />
       Refresh data
     </button>
@@ -649,6 +795,131 @@ const [productForm, setProductForm] = useState({
     </div>
   </div>
 )}
+{showAddCustomer && (
+  <div className="modal-backdrop">
+    <div className="product-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title">
+      <div className="modal-header">
+        <div>
+          <h3 id="customer-modal-title">{editingCustomerId ? "Edit Customer" : "Register New Customer"}</h3>
+          <p>{editingCustomerId ? "Update the customer contact information." : "Enter the customer contact information."}</p>
+        </div>
+        <button
+          type="button"
+          className="close-button"
+          onClick={() => {
+            setEditingCustomerId(null)
+            setShowAddCustomer(false)
+          }}
+          aria-label="Close customer form"
+        >
+          ×
+        </button>
+      </div>
+
+      <form onSubmit={handleAddCustomer}>
+        <div className="form-grid">
+          <label className="form-field full-width">
+            Full Name *
+            <input
+              type="text"
+              name="fullName"
+              value={customerForm.fullName}
+              onChange={(event) =>
+                setCustomerForm((prev) => ({
+                  ...prev,
+                  fullName: event.target.value,
+                }))
+              }
+              required
+              maxLength={120}
+              placeholder="e.g. John Customer"
+            />
+          </label>
+
+          <label className="form-field">
+            Email Address *
+            <input
+              type="email"
+              name="email"
+              value={customerForm.email}
+              onChange={(event) =>
+                setCustomerForm((prev) => ({
+                  ...prev,
+                  email: event.target.value,
+                }))
+              }
+              required
+              maxLength={150}
+              placeholder="e.g. john@example.com"
+            />
+          </label>
+
+          <label className="form-field">
+            Phone Number *
+            <input
+              type="tel"
+              name="phone"
+              value={customerForm.phone}
+              onChange={(event) =>
+                setCustomerForm((prev) => ({
+                  ...prev,
+                  phone: event.target.value,
+                }))
+              }
+              required
+              maxLength={20}
+              placeholder="e.g. 08012345678"
+            />
+          </label>
+
+          <label className="form-field full-width">
+            Address
+            <textarea
+              name="address"
+              value={customerForm.address}
+              onChange={(event) =>
+                setCustomerForm((prev) => ({
+                  ...prev,
+                  address: event.target.value,
+                }))
+              }
+              maxLength={255}
+              rows={3}
+              placeholder="Customer's address"
+            />
+          </label>
+        </div>
+
+        {customerFormError && (
+          <div className="form-error">{customerFormError}</div>
+        )}
+
+        <div className="form-actions">
+          <button
+            type="button"
+            className="cancel-button"
+            onClick={() => {
+            setEditingCustomerId(null)
+            setShowAddCustomer(false)
+          }}
+            disabled={savingCustomer}
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={savingCustomer}
+          >
+            {savingCustomer ? 'Saving...' : editingCustomerId ? 'Update Customer' : 'Register Customer'}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
+
 {selectedOrder && (
   <div className="modal-backdrop">
     <div className="product-modal order-details-modal" role="dialog" aria-modal="true" aria-labelledby="order-details-title">
@@ -1188,6 +1459,123 @@ const [productForm, setProductForm] = useState({
               <div className="table-footer">
                 <span>
                   Showing {filteredOrders.length} of {orders.length} orders
+                </span>
+                <span className="live-label">
+                  <span className="status-dot" />
+                  Live database data
+                </span>
+              </div>
+            </section>
+          ) : activePage === 'Customers' ? (
+            <section className="content-card">
+              <div className="table-header">
+                <div>
+                  <h3>Customer directory</h3>
+                  <p>Manage your registered customers</p>
+                </div>
+
+                <div className="table-actions">
+                  <div className="search-box">
+                    <Search size={17} />
+                    <input
+                      type="search"
+                      placeholder="Search customers..."
+                      value={customerSearch}
+                      onChange={(event) => setCustomerSearch(event.target.value)}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => {
+                      setEditingCustomerId(null)
+                      setCustomerFormError('')
+                      setCustomerForm({
+                        fullName: '',
+                        email: '',
+                        phone: '',
+                        address: '',
+                      })
+                      setShowAddCustomer(true)
+                    }}
+                  >
+                    + Add Customer
+                  </button>
+                </div>
+              </div>
+
+              {customersError ? (
+                <div className="empty-state">
+                  <AlertTriangle size={24} />
+                  <p>{customersError}</p>
+                  <button className="primary-button" onClick={loadCustomers}>
+                    Try again
+                  </button>
+                </div>
+              ) : customersLoading ? (
+                <div className="empty-state">
+                  <p>Loading customers...</p>
+                </div>
+              ) : customers.length === 0 ? (
+                <div className="empty-state">
+                  <Users size={26} />
+                  <h3>No customers yet</h3>
+                  <p>Registered customers will appear here.</p>
+                </div>
+              ) : filteredCustomers.length === 0 ? (
+                <div className="empty-state">
+                  <Search size={24} />
+                  <p>No customers match your search.</p>
+                </div>
+              ) : (
+                <div className="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Customer</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Address</th>
+                        <th>Date registered</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCustomers.map((customer) => (
+                        <tr key={customer.id}>
+                          <td>#{customer.id}</td>
+                          <td><strong>{customer.fullName}</strong></td>
+                          <td>{customer.email}</td>
+                          <td>{customer.phone}</td>
+                          <td>{customer.address || '—'}</td>
+                          <td>
+                            {customer.createdAt
+                              ? new Date(customer.createdAt).toLocaleDateString('en-NG', {
+                                  dateStyle: 'medium',
+                                })
+                              : '—'}
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="edit-button"
+                              onClick={() => handleEditCustomer(customer)}
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="table-footer">
+                <span>
+                  Showing {filteredCustomers.length} of {customers.length} customers
                 </span>
                 <span className="live-label">
                   <span className="status-dot" />
