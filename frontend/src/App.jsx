@@ -48,6 +48,11 @@ function App() {
   const [customersError, setCustomersError] = useState('')
   const [customerSearch, setCustomerSearch] = useState('')
 
+  const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState(null)
+  const [customerOrders, setCustomerOrders] = useState([])
+  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false)
+  const [customerOrdersError, setCustomerOrdersError] = useState('')
+
   const [editingCustomerId, setEditingCustomerId] = useState(null)
   const [showAddCustomer, setShowAddCustomer] = useState(false)
   const [savingCustomer, setSavingCustomer] = useState(false)
@@ -141,6 +146,28 @@ const [productForm, setProductForm] = useState({
     })
 
     setShowAddCustomer(true)
+  }
+
+  async function handleViewCustomerOrders(customer) {
+    setSelectedHistoryCustomer(customer)
+    setCustomerOrders([])
+    setCustomerOrdersError('')
+    setCustomerOrdersLoading(true)
+
+    try {
+      const response = await fetch(`/api/orders/customer/${customer.id}`)
+
+      if (!response.ok) {
+        throw new Error(`Server returned HTTP ${response.status}`)
+      }
+
+      const data = await response.json()
+      setCustomerOrders(Array.isArray(data) ? data : [])
+    } catch (err) {
+      setCustomerOrdersError(err.message || 'Could not load customer order history')
+    } finally {
+      setCustomerOrdersLoading(false)
+    }
   }
 
   const loadOrders = useCallback(async () => {
@@ -1018,6 +1045,146 @@ const [productForm, setProductForm] = useState({
   </div>
 )}
 
+{selectedHistoryCustomer && (
+  <div className="modal-backdrop">
+    <div className="product-modal order-details-modal" role="dialog" aria-modal="true" aria-labelledby="customer-history-title">
+      <div className="modal-header">
+        <div>
+          <h3 id="customer-history-title">
+            Order History: {selectedHistoryCustomer.fullName}
+          </h3>
+          <p>Previous purchases by this customer</p>
+        </div>
+        <button
+          type="button"
+          className="close-button"
+          onClick={() => setSelectedHistoryCustomer(null)}
+          aria-label="Close customer order history"
+        >
+          ×
+        </button>
+      </div>
+
+      {customerOrdersLoading ? (
+        <div className="empty-state">
+          <p>Loading customer order history...</p>
+        </div>
+      ) : customerOrdersError ? (
+        <div className="empty-state">
+          <AlertTriangle size={24} />
+          <p>{customerOrdersError}</p>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => handleViewCustomerOrders(selectedHistoryCustomer)}
+          >
+            Try again
+          </button>
+        </div>
+      ) : customerOrders.length === 0 ? (
+        <div className="empty-state">
+          <ShoppingCart size={26} />
+          <h3>No orders yet</h3>
+          <p>This customer has not placed any orders.</p>
+        </div>
+      ) : (
+        <>
+          <div className="order-details-summary">
+            <div>
+              <span>Customer</span>
+              <strong>{selectedHistoryCustomer.fullName}</strong>
+            </div>
+            <div>
+              <span>Total orders</span>
+              <strong>{customerOrders.length}</strong>
+            </div>
+            <div>
+              <span>Total purchase value</span>
+              <strong>
+                {currency.format(
+                  customerOrders.reduce(
+                    (total, order) => total + (Number(order.totalAmount) || 0),
+                    0
+                  )
+                )}
+              </strong>
+            </div>
+          </div>
+
+          <div className="customer-history-list">
+            {customerOrders.map((order) => (
+              <section className="content-card" key={order.orderId}>
+                <div className="table-header">
+                  <div>
+                    <h3>Order #{order.orderId}</h3>
+                    <p>
+                      {order.createdAt
+                        ? new Date(order.createdAt).toLocaleString('en-NG', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })
+                        : 'Date unavailable'}
+                    </p>
+                  </div>
+                  <span className={`status-pill order-status status-${String(order.status || '').toLowerCase()}`}>
+                    {order.status || 'UNKNOWN'}
+                  </span>
+                </div>
+
+                <div className="table-wrap">
+                  <table className="product-table">
+                    <thead>
+                      <tr>
+                        <th>PRODUCT</th>
+                        <th>QUANTITY</th>
+                        <th>UNIT PRICE</th>
+                        <th>SUBTOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.isArray(order.items) && order.items.length > 0 ? (
+                        order.items.map((item, index) => (
+                          <tr key={`${item.productId}-${index}`}>
+                            <td><strong>{item.productName || 'Unknown product'}</strong></td>
+                            <td>{item.quantity}</td>
+                            <td>{currency.format(Number(item.unitPrice) || 0)}</td>
+                            <td>{currency.format(Number(item.subtotal) || 0)}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="4">No order items found.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="order-details-total">
+                  <span>Order total</span>
+                  <strong>
+                    {currency.format(Number(order.totalAmount) || 0)}
+                  </strong>
+                </div>
+              </section>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="form-actions">
+        <button
+          type="button"
+          className="cancel-button"
+          onClick={() => setSelectedHistoryCustomer(null)}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
           {activePage === 'Dashboard' || activePage === 'Products' ? (
             <>
               {activePage === 'Dashboard' && (
@@ -1564,6 +1731,13 @@ const [productForm, setProductForm] = useState({
                               onClick={() => handleEditCustomer(customer)}
                             >
                               Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="edit-button"
+                              onClick={() => handleViewCustomerOrders(customer)}
+                            >
+                              View Orders
                             </button>
                           </td>
                         </tr>
