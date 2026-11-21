@@ -53,6 +53,10 @@ function App() {
   const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false)
   const [customerOrdersError, setCustomerOrdersError] = useState('')
 
+  const [selectedDetailsCustomer, setSelectedDetailsCustomer] = useState(null)
+  const [customerDetailsLoading, setCustomerDetailsLoading] = useState(false)
+  const [customerDetailsError, setCustomerDetailsError] = useState('')
+
   const [editingCustomerId, setEditingCustomerId] = useState(null)
   const [showAddCustomer, setShowAddCustomer] = useState(false)
   const [savingCustomer, setSavingCustomer] = useState(false)
@@ -167,6 +171,28 @@ const [productForm, setProductForm] = useState({
       setCustomerOrdersError(err.message || 'Could not load customer order history')
     } finally {
       setCustomerOrdersLoading(false)
+    }
+  }
+
+  async function handleViewCustomerDetails(customer) {
+    setSelectedDetailsCustomer(customer)
+    setCustomerOrders([])
+    setCustomerDetailsError('')
+    setCustomerDetailsLoading(true)
+
+    try {
+      const response = await fetch(`/api/orders/customer/${customer.id}`)
+
+      if (!response.ok) {
+        throw new Error(`Server returned HTTP ${response.status}`)
+      }
+
+      const data = await response.json()
+      setCustomerOrders(Array.isArray(data) ? data : [])
+    } catch (err) {
+      setCustomerDetailsError(err.message || 'Could not load customer details')
+    } finally {
+      setCustomerDetailsLoading(false)
     }
   }
 
@@ -1185,6 +1211,161 @@ const [productForm, setProductForm] = useState({
   </div>
 )}
 
+{selectedDetailsCustomer && (
+  <div className="modal-backdrop">
+    <div className="product-modal order-details-modal" role="dialog" aria-modal="true" aria-labelledby="customer-details-title">
+      <div className="modal-header">
+        <div>
+          <h3 id="customer-details-title">Customer Details</h3>
+          <p>Customer profile and purchase summary</p>
+        </div>
+        <button
+          type="button"
+          className="close-button"
+          onClick={() => setSelectedDetailsCustomer(null)}
+          aria-label="Close customer details"
+        >
+          ×
+        </button>
+      </div>
+
+      {customerDetailsLoading ? (
+        <div className="empty-state">
+          <p>Loading customer details...</p>
+        </div>
+      ) : customerDetailsError ? (
+        <div className="empty-state">
+          <AlertTriangle size={24} />
+          <p>{customerDetailsError}</p>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => handleViewCustomerDetails(selectedDetailsCustomer)}
+          >
+            Try again
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="order-details-summary">
+            <div>
+              <span>Customer ID</span>
+              <strong>#{selectedDetailsCustomer.id}</strong>
+            </div>
+            <div>
+              <span>Total orders</span>
+              <strong>{customerOrders.length}</strong>
+            </div>
+            <div>
+              <span>Total purchase value</span>
+              <strong>
+                {currency.format(
+                  customerOrders.reduce(
+                    (total, order) => total + (Number(order.totalAmount) || 0),
+                    0
+                  )
+                )}
+              </strong>
+            </div>
+          </div>
+
+          <section className="content-card">
+            <h3>Personal Information</h3>
+            <div className="order-details-summary">
+              <div>
+                <span>Full name</span>
+                <strong>{selectedDetailsCustomer.fullName || '—'}</strong>
+              </div>
+              <div>
+                <span>Email address</span>
+                <strong>{selectedDetailsCustomer.email || '—'}</strong>
+              </div>
+              <div>
+                <span>Phone number</span>
+                <strong>{selectedDetailsCustomer.phone || '—'}</strong>
+              </div>
+              <div>
+                <span>Address</span>
+                <strong>{selectedDetailsCustomer.address || 'Not provided'}</strong>
+              </div>
+              <div>
+                <span>Date registered</span>
+                <strong>
+                  {selectedDetailsCustomer.createdAt
+                    ? new Date(selectedDetailsCustomer.createdAt).toLocaleDateString('en-NG', {
+                        dateStyle: 'medium',
+                      })
+                    : '—'}
+                </strong>
+              </div>
+            </div>
+          </section>
+
+          <section className="content-card">
+            <div className="table-header">
+              <div>
+                <h3>Order History</h3>
+                <p>Previous purchases by this customer</p>
+              </div>
+            </div>
+
+            {customerOrders.length === 0 ? (
+              <div className="empty-state">
+                <ShoppingCart size={26} />
+                <h3>No orders yet</h3>
+                <p>This customer has not placed any orders.</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="product-table">
+                  <thead>
+                    <tr>
+                      <th>ORDER</th>
+                      <th>DATE</th>
+                      <th>STATUS</th>
+                      <th>TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customerOrders.map((order) => (
+                      <tr key={order.orderId}>
+                        <td><strong>#{order.orderId}</strong></td>
+                        <td>
+                          {order.createdAt
+                            ? new Date(order.createdAt).toLocaleDateString('en-NG', {
+                                dateStyle: 'medium',
+                              })
+                            : '—'}
+                        </td>
+                        <td>
+                          <span className={`status-pill order-status status-${String(order.status || '').toLowerCase()}`}>
+                            {order.status || 'UNKNOWN'}
+                          </span>
+                        </td>
+                        <td>{currency.format(Number(order.totalAmount) || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      <div className="form-actions">
+        <button
+          type="button"
+          className="cancel-button"
+          onClick={() => setSelectedDetailsCustomer(null)}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
           {activePage === 'Dashboard' || activePage === 'Products' ? (
             <>
               {activePage === 'Dashboard' && (
@@ -1738,6 +1919,13 @@ const [productForm, setProductForm] = useState({
                               onClick={() => handleViewCustomerOrders(customer)}
                             >
                               View Orders
+                            </button>
+                            <button
+                              type="button"
+                              className="edit-button"
+                              onClick={() => handleViewCustomerDetails(customer)}
+                            >
+                              View Details
                             </button>
                           </td>
                         </tr>
