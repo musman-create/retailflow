@@ -457,12 +457,22 @@ const [productForm, setProductForm] = useState({
   }, [])
 
   useEffect(() => {
-    if (activePage === 'Orders' || activePage === 'Reports') {
-      loadOrders()
-    }
+    let cancelled = false
 
-    if (activePage === 'Customers') {
-      loadCustomers()
+    Promise.resolve().then(() => {
+      if (cancelled) return
+
+      if (activePage === 'Orders' || activePage === 'Reports') {
+        loadOrders()
+      }
+
+      if (activePage === 'Customers') {
+        loadCustomers()
+      }
+    })
+
+    return () => {
+      cancelled = true
     }
   }, [activePage, loadOrders, loadCustomers])
 
