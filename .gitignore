@@ -36,3 +36,10 @@ build/
 # Local database backups
 *.sql
 Dockerfile.before-frontend
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
